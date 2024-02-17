@@ -7,42 +7,66 @@ require 'classes/Item.php';
 
 class Request
 {
-    public $id;
-    public $user;
-    public $item;
-    public $itemType;
-    private $db;
+    public $id; /* request id */
+    public $user; /* user id */
+    public $item; /* item id */
+    public $itemType; /* item type */
+    private $db; /* database connection */
 
+    /**
+     * __construct
+     * 
+     * @param db $db
+     */
     public function __construct($db)
     {
         $this->db = $db;
     }
 
+    /**
+     * getRequest
+     * 
+     * get request by id
+     *
+     * @param int $id
+     * @return array
+     */
     public function getRequest($id): array
     {
-        $stmt = $this->db->prepare("SELECT * FROM requests WHERE id = :id");
+        $stmt = $this->db->prepare("
+        SELECT u.fName, GROUP_CONCAT( i.id SEPARATOR', ') AS i 
+        FROM requests r 
+        LEFT JOIN users u ON r.user_fk = u.id
+        LEFT JOIN type_requests tr ON r.id = tr.request_fk
+        LEFT JOIN items i ON tr.item_fk = i.id
+        WHERE r.id = :id
+        ");
         $stmt->bindParam(':id', $id);
         $stmt->execute();
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         return $result;
+        
     }
 
+    /**
+     * getRequests
+     * 
+     * get all requests
+     *
+     * @return array
+     */
     public function getRequests(): array
     {
-        //$pencil = '<span class="bi bi-pencil"></span>';
-        $sql = <<<SQL
+        $stmt = $this->db->prepare("
         SELECT u.fName, GROUP_CONCAT( i.item SEPARATOR', ') AS item, 
-        it.type, r.id AS action, dt_requested
+        it.type, r.id AS action, r.dt_requested
         FROM requests r 
-        LEFT JOIN users u on r.user_fk = u.id 
-        LEFT JOIN items i ON r.item_fk = i.Id 
-        LEFT JOIN item_type it ON i.item_type = it.id
-        GROUP BY fName, type, DAY(dt_requested);
-SQL;
-
-        error_log("sql-" . print_r($sql, true) . "\n\n", 3, "C:\cg\work\ascendion\logs\\test.log");
-
-        $stmt = $this->db->prepare($sql);
+        LEFT JOIN type_requests tr ON r.id = tr.request_fk 
+        LEFT JOIN item_type it ON it.id = tr.type_fk 
+        LEFT JOIN items i ON i.id = tr.item_fk
+        LEFT JOIN users u ON u.id = r.user_fk
+        GROUP BY r.id, fName, it.type, DAY(r.dt_requested);
+        ");
         $stmt->execute();
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($result as $key => $value) {
@@ -52,6 +76,15 @@ SQL;
         return $result;
     }
 
+    /**
+     * addRequest
+     * 
+     * add a request to the requests table
+     *
+     * @param string $fName
+     * @param string $item
+     * @return int
+     */
     public function addRequest($fName, $item): int
     {
         //instantiate user object
@@ -59,31 +92,98 @@ SQL;
         if (!$userId = $userObj->getUserByName($fName)) {
             $userId = $userObj->addUser($fName);
         }
-        
-        $itemObj = new Item($this->db);
-        $itemObjArr[] = $itemObj->getItemObjects($item);
-        $itemObjJson = json_encode($itemObjArr);
-        $item = 5;
-        error_log("addRequest-item-".print_r($item, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
-        $stmt = $this->db->prepare("INSERT INTO requests (user_fk, item_fk, json1) VALUES (:user, :item, :itemObjJson)");
+
+        $stmt = $this->db->prepare("INSERT INTO requests (user_fk) VALUES (:user)");
         $stmt->bindParam(':user', $userId);
-        $stmt->bindParam(':item', $item);
-        $stmt->bindParam(':itemObjJson', $itemObjJson);
         $stmt->execute();
-        return $this->db->lastInsertId('requests');
+
+        $request = $this->db->lastInsertId('requests');
+
+        $this->createRequestItemArray($request, $item);
+
+        return $request;
     }
 
+    /**
+     * addTypeRequest
+     * 
+     * add a type request to the type_requests table
+     *
+     * @param int $request
+     * @param object $item
+     * @return int
+     */
+    public function addTypeRequest($request, $item): int
+    {
+        $stmt = $this->db->prepare("INSERT INTO type_requests (request_fk, type_fk, item_fk) VALUES (:request, :type, :item)");
+        $stmt->bindParam(':request', $request);
+        $stmt->bindParam(':type', $item->item_type);
+        $stmt->bindParam(':item', $item->id);
+        $stmt->execute();
+        return $this->db->lastInsertId('type_requests');
+    }
+
+    /**
+     * createRequestItemArray
+     * 
+     * create an array of items for a request
+     *
+     * @param int $request
+     * @param array $item
+     * @return void
+     */
+    public function createRequestItemArray($request, $item): void
+    {
+        $itemObj = new Item($this->db);
+        $itemObjArr = $itemObj->getItemObjects($item);
+
+        foreach ($itemObjArr as $key => $value) {
+            $this->addTypeRequest($request, $value);
+        }
+    }
+
+    /**
+     * updateRequest
+     * 
+     * update a request in the requests table
+     *
+     * @param int $id
+     * @param string $fName
+     * @param string $item
+     * @return bool
+     */
     public function updateRequest($id, $fName, $item): bool
     {
         //instantiate user object
         $userObj = new User($this->db);
         if (!$userId = $userObj->getUserByName($fName)) {
             $userId = $userObj->addUser($fName);
+            $this->updateUserInReqest($id, $userId);
         }
 
-        $stmt = $this->db->prepare("UPDATE requests SET user_fk = :user, item_fk = :item WHERE id = :id");
+        //delete all type_requests for this request in preparation for repopulation
+        $stmt = $this->db->prepare("DELETE FROM type_requests WHERE request_fk = :id");
+        $stmt->bindParam(':id', $id);
+        $stmt->execute();
+
+        $this->createRequestItemArray($id, $item);
+
+        return true;
+    }
+
+    /**
+     * updateUserInReqest
+     * 
+     * update the user in the requests table
+     *
+     * @param int $id
+     * @param int $userId
+     * @return bool
+     */
+    public function updateUserInReqest($id, $userId): bool
+    {
+        $stmt = $this->db->prepare("UPDATE requests SET user_fk = :user WHERE id = :id");
         $stmt->bindParam(':user', $userId);
-        $stmt->bindParam(':item', $item);
         $stmt->bindParam(':id', $id);
         $stmt->execute();
         return true;

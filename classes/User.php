@@ -5,14 +5,27 @@ use classes\db;
 
 
 class User {
-    public $id;
-    public $fName;
-    private $db;
+    public $id; /* user id */
+    public $fName; /* user first name */
+    private $db; /* database connection */
 
+    /**
+     * __construct
+     * 
+     * @param db $db
+     */
     public function __construct($db) {
         $this->db = $db;
     }
 
+    /**
+     * getUser
+     * 
+     * get user by id
+     *
+     * @param int $id
+     * @return array
+     */
     public function getUser($id): array{
         $stmt = $this->db->prepare("SELECT * FROM users WHERE id = :id");
         $stmt->bindParam(':id', $id);
@@ -21,6 +34,15 @@ class User {
         return $result;
     }
 
+    /**
+     * getUserByName
+     * 
+     * get user by name
+     * used to decide if user exists
+     *
+     * @param string $fName
+     * @return int
+     */
     public function getUserByName($fName): int{
         $stmt = $this->db->prepare("SELECT id FROM users WHERE fName = :fName");
         $stmt->bindParam(':fName', $fName);
@@ -32,30 +54,18 @@ class User {
         }
     }
 
-    public function getUsers(): array {
-        $stmt = $this->db->prepare("SELECT * FROM users;");
-        $stmt->execute();
-        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        return $result;
-    }
-
+    /**
+     * addUser
+     * 
+     * add a user to the users table
+     *
+     * @param string $fName
+     * @return int
+     */
     public function addUser($fName): int{
         $stmt = $this->db->prepare("INSERT INTO users (fName) VALUES (:fName)");
         $stmt->bindParam(':fName', $fName);
         $stmt->execute();
         return $this->db->lastInsertId('users');
     }
-
-    public function matchUser($fName): bool{
-        $userMatch = false;
-        $stmt = $this->db->prepare("SELECT * FROM users WHERE fName = :fName");
-        $stmt->bindParam(':fName', $fName);
-        $stmt->execute();
-        if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $userMatch = true;
-        }
-        return $userMatch;
-    }
-
-
 }

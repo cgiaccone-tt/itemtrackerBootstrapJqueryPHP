@@ -1,0 +1,9 @@
+
+.input-group > label.formLabel {
+  font-weight: bold;
+  width: 150px;
+}
+
+.addRemoveBtns {
+  width: 40px;
+}

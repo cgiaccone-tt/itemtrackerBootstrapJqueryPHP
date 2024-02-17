@@ -27,7 +27,7 @@ class db
   	 */
     public function __construct() 
     {
-        $dsn = 'mysql:host=localhost;dbname=ascendion';
+        $dsn = 'mysql:host=localhost;dbname=ascendion1';
         $username = 'root';
         $password = '';
         $driver_options = array();
