@@ -33,15 +33,27 @@ class Request
      */
     public function getRequest($id): array
     {
-        $stmt = $this->db->prepare("
-        SELECT u.fName, GROUP_CONCAT( i.id SEPARATOR', ') AS i 
-        FROM requests r 
-        LEFT JOIN users u ON r.user_fk = u.id
-        LEFT JOIN type_requests tr ON r.id = tr.request_fk
-        LEFT JOIN items i ON tr.item_fk = i.id
-        WHERE r.id = :id
-        ");
+        $stmt = $this->db->prepare("SELECT type_fk, request_fk FROM type_requests WHERE id = :id");
         $stmt->bindParam(':id', $id);
+        $stmt->execute();
+        $typeRequestArr = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $type_id = $typeRequestArr['type_fk'];
+        $request_id = $typeRequestArr['request_fk'];
+        
+        $stmt = $this->db->prepare("
+        SELECT u.fName, GROUP_CONCAT( i.id SEPARATOR', ') AS i, 
+        it.type, r.id AS action, r.dt_requested
+        FROM requests r 
+        LEFT JOIN type_requests tr ON r.id = tr.request_fk 
+        LEFT JOIN item_type it ON it.id = tr.type_fk 
+        LEFT JOIN items i ON i.id = tr.item_fk
+        LEFT JOIN users u ON u.id = r.user_fk
+        WHERE tr.request_fk = :request_id AND tr.type_fk = :type_id
+        GROUP BY fName, it.type, DAY(r.dt_requested);
+        ");
+        $stmt->bindParam(':request_id', $request_id);
+        $stmt->bindParam(':type_id', $type_id);
         $stmt->execute();
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         return $result;
@@ -59,13 +71,13 @@ class Request
     {
         $stmt = $this->db->prepare("
         SELECT u.fName, GROUP_CONCAT( i.item SEPARATOR', ') AS item, 
-        it.type, r.id AS action, r.dt_requested
+        it.type, tr.id AS action, r.dt_requested
         FROM requests r 
         LEFT JOIN type_requests tr ON r.id = tr.request_fk 
         LEFT JOIN item_type it ON it.id = tr.type_fk 
         LEFT JOIN items i ON i.id = tr.item_fk
         LEFT JOIN users u ON u.id = r.user_fk
-        GROUP BY r.id, fName, it.type, DAY(r.dt_requested);
+        GROUP BY fName, it.type, DAY(r.dt_requested);
         ");
         $stmt->execute();
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -87,6 +99,7 @@ class Request
      */
     public function addRequest($fName, $item): int
     {
+        error_log("request-addReqest-".print_r($item, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
         //instantiate user object
         $userObj = new User($this->db);
         if (!$userId = $userObj->getUserByName($fName)) {
@@ -152,8 +165,43 @@ class Request
      * @param string $item
      * @return bool
      */
-    public function updateRequest($id, $fName, $item): bool
+    public function updateRequest($id, $fName, $item, $type=true): bool
     {
+        //If type is true then we are pulling items from the type_requests table
+        //and we need to convert to the request id
+        if ($type) {
+            $stmt = $this->db->prepare("SELECT request_fk FROM type_requests WHERE id = :id");
+            $stmt->bindParam(':id', $id);
+            $stmt->execute();
+            $id = $stmt->fetchColumn();
+        }
+        error_log("request-updateRequest-item-".print_r($item, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
+        $stmt = $this->db->prepare("
+        SELECT i.id 
+        FROM type_requests tr
+        LEFT JOIN items i ON i.id = tr.item_fk
+        WHERE request_fk = :id
+        ");
+        $stmt->bindParam(':id', $id);
+        $stmt->execute();
+        $existingItems = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $items = array_merge($item, $existingItems);
+
+        //Remove any duplicates
+        $items = is_array($items) ? array_unique($items) : [];
+        error_log("request-updateRequest-items-".print_r($items, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
+
+        $stmt = $this->db->prepare("
+        DELETE FROM type_requests 
+        WHERE request_fk = :id
+        ");
+        $stmt->bindParam(':id', $id);
+        $stmt->execute();
+
+        $this->createRequestItemArray($id, $items);
+    
+
         //instantiate user object
         $userObj = new User($this->db);
         if (!$userId = $userObj->getUserByName($fName)) {
@@ -161,12 +209,6 @@ class Request
             $this->updateUserInReqest($id, $userId);
         }
 
-        //delete all type_requests for this request in preparation for repopulation
-        $stmt = $this->db->prepare("DELETE FROM type_requests WHERE request_fk = :id");
-        $stmt->bindParam(':id', $id);
-        $stmt->execute();
-
-        $this->createRequestItemArray($id, $item);
 
         return true;
     }
@@ -187,5 +229,19 @@ class Request
         $stmt->bindParam(':id', $id);
         $stmt->execute();
         return true;
+    }
+
+    public function getRequestIdFromUser($fName): int
+    {
+        $stmt = $this->db->prepare("SELECT id FROM users WHERE fName = :fName");
+        $stmt->bindParam(':fName', $fName);
+        $stmt->execute();
+        $userId = $stmt->fetchColumn();
+        
+        $stmt = $this->db->prepare("SELECT id FROM requests WHERE user_fk = :user_fk");
+        $stmt->bindParam(':user_fk', $userId);
+        $stmt->execute();
+        $requestId = $stmt->fetchColumn();
+        return $requestId;
     }
 }

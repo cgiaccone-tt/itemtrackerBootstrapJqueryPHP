@@ -51,6 +51,31 @@ class Item {
     }
 
     /**
+     * getAllItemsOfSameType
+     * 
+     * get all items of the same type
+     *
+     * @param int $id
+     * @return array
+     */
+    //Used to get all items not of the same type for select list option removal
+    //I started with getting all items of the same type but this makes the JS code less complex
+    public function getAllItemsNotOfSameType($id): array{
+        // get the type of the item
+        $stmt = $this->db->prepare("SELECT item_type FROM items WHERE id = :id");
+        $stmt->bindParam(':id', $id);
+        $stmt->execute();
+        $type = $stmt->fetchColumn();
+
+        // get all items of the same type
+        $stmt = $this->db->prepare("SELECT * FROM items WHERE item_type != :type");
+        $stmt->bindParam(':type', $type);
+        $stmt->execute();
+        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $result;        
+    }
+
+    /**
      * getItemObjects
      * 
      * get items by id and return as an object
@@ -65,6 +90,22 @@ class Item {
             $result[] = $this->getItemObj($value);
         }
         
+        return $result;
+    }
+
+    /**
+     * getItemType
+     * 
+     * get item type by id
+     *
+     * @param int $id
+     * @return int
+     */
+    public function getItemType($id): int{
+        $stmt = $this->db->prepare("SELECT item_type FROM items WHERE id = :id");
+        $stmt->bindParam(':id', $id);
+        $stmt->execute();
+        $result = $stmt->fetchColumn();
         return $result;
     }
 }

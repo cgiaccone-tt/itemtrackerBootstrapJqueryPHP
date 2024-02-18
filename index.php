@@ -2,9 +2,7 @@
 
 require_once('classes/db.php');
 require_once('classes/Item.php');
-$db = new db('mysql:host=localhost;dbname=ascendion', 'root', '', array());
-$itemObj = new Item($db);
-$items = $itemObj->getItems();
+require_once('db.php');
 ?>
 <!doctype html>
 <html lang="en">
@@ -22,12 +20,8 @@ $items = $itemObj->getItems();
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="index.css">
-    
+    <script src="index.js"></script>
 </head>
-
-
-
-
 
 <body>
     <div class="container px-4 py-4">
@@ -76,9 +70,7 @@ $items = $itemObj->getItems();
                             <label for="item" class="col-sm-2 col-form-label formLabel">Requested Items</label>
                             <select name="itemName[]" class="form-select">
                                 <option selected>Choose...</option>
-                                <?php foreach ($items as $item) : ?>
-                                    <option value="<?= $item['id'] ?>"><?= $item['item'] ?></option>
-                                <?php endforeach; ?>
+                                
                             </select>
                             <button type="button" class="btn btn-secondary addRemoveBtns addField">+</button>
                         </div>
@@ -93,137 +85,5 @@ $items = $itemObj->getItems();
         </div>
     </div>
 </body>
-
-<script>
-    $('document').ready(function() {
-
-        //initialize datatable
-        const table = new DataTable('#RequestedItems', {
-            ajax: 'process.php?action=getRequests',
-            columns: [{
-                    data: 'fName'
-                },
-                {
-                    data: 'item'
-                },
-                {
-                    data: 'type'
-                },
-                {
-                    data: 'action'
-                }
-            ]
-        });
-
-        //show modal
-        $("#addRequest").on('click', function(e) {
-            e.preventDefault();
-            //reset the form
-            $("#requestForm").trigger("reset");
-            $('.removeField').parent('div').remove();
-            $('#exampleModal').modal('toggle');
-            $("#exampleModal").modal('show');
-        });
-
-        //remove select fields from form
-        $("#exampleModal").on('click', '.removeField', function(e) {
-            e.preventDefault();
-            $(this).parent().remove();
-        });
-
-        //add select fields to form
-        $("#exampleModal").on('click', '.addField', function(e) {
-            e.preventDefault();
-            var ele = $(this).closest('div').clone(true);
-            //console.log(ele);
-            $(this).closest('div').after(ele);
-            $(this).removeClass('addField').addClass('removeField').text('-');
-        });
-
-        //save/update form data
-        //update changes initial hidden input value to updateRequest from addRequest
-        $("#exampleModal").on('click', '.btn-primary', function(e) {
-            e.preventDefault();
-            let form = $("#requestForm");
-            let url = "process.php";
-            $.ajax({
-                type: "POST",
-                url: url,
-                data: form.serialize(),
-                dataType: "json",
-                success: function(data) {
-
-                    // Ajax call completed successfully
-                    $("#requestForm").trigger("reset");
-                    $('.removeField').parent('div').remove();
-                    $('#exampleModal').modal('toggle');
-                    //console.log(data);
-
-                    //return updated data to main page (datatables)
-                    table.ajax.url('process.php?action=getRequests').load();
-                },
-                error: function(data) {
-
-                    // Some error in ajax call
-                    alert(e.responseText);
-                }
-            });
-        });
-
-        //edit form data
-        $("#RequestedItems").on('click', '.bi-pencil', function(e) {
-            e.preventDefault();
-            //console.log($(this).data('id'));
-
-            //open modal and populate form
-            $("#exampleModal").modal('show');
-            $("#action").val('updateRequest');
-            if ($("#id").length == 0) {
-                $('#action').after('<input type="hidden" name="id" id="id" value="' + $(this).data('id') + '">');
-            }else{
-                $("#id").val($(this).data('id'));
-            }
-            
-            $.ajax({
-                type: "GET",
-                url: "process.php",
-                data: {
-                    action: 'getRequest',
-                    id: $(this).data('id')
-                },
-                dataType: "json",
-                success: function(data) {
-                    // Ajax call completed successfully
-
-                    //remove fields from form other than first which has an .addField class instead 
-                    //of .removeField
-                    $(".removeField").parent('div').remove();
-
-                    //populate form with the name
-                    $("#fname").val(data.fName);
-
-                    //take the items and split them into an array
-                    let items = data.i.split(',');
-
-                    //loop through the array and add the items to the form, set the value of the select 
-                    //to the item and set up the buttons correctly
-                    $.each(items, function(i) {
-                        let container = $("#requestForm div:last").clone(true);
-                        $("#requestForm button").removeClass('addField').addClass('removeField').text('-');
-                        $("#requestForm div:last").after(container);
-                        let itemVal = parseInt(items[i]);
-                        $("#requestForm div:last select").val(itemVal);
-                    });
-                    //remove the first requested items field container which we are now not using
-                    $("#requestForm div").eq(2).remove();
-                },
-                error: function(data) {
-                    alert(e.responseText);
-                }
-            });
-
-        });
-    });
-</script>
 
 </html>
