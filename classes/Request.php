@@ -2,7 +2,7 @@
 
 require 'classes/User.php';
 require 'classes/Item.php';
-require 'classes/summary.php';
+require 'classes/Summary.php';
 
 
 class Request
