@@ -1,7 +1,5 @@
 <?php
 
-use classes\db;
-
 
 class Summary {
     public $id; /* summary id */

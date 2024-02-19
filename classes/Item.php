@@ -1,8 +1,5 @@
 <?php
 
-use classes\db;
-
-
 
 class Item {
     public $id; /* item id */
