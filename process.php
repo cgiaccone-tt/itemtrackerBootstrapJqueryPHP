@@ -10,7 +10,6 @@
         $requestObj = new Request($db);
         $return = $requestObj->getRequest($_GET['id']);
         $return = json_encode($return);
-        error_log("return-".print_r($return, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
         
         echo $return;    
     }
@@ -26,29 +25,34 @@
     if (isset($_POST['action']) && $_POST['action'] == 'addRequest') {
         $requestObj = new Request($db);
         $userObj = new User($db);
-        if (!$userObj->getUserByName($_POST['fName'])) {
-            $requestObj->addRequest($_POST['fName'],$_POST['itemName']);
+
+
+        if (isset($_POST['fName']) && !$userObj->getUserByName($_POST['fName'])) {
+            $requestObj->addRequest($_POST['fName'], $_POST['itemName']);
         }else{
-            $requestId = $requestObj->getRequestIdFromUser($_POST['fName']);
-            //$itemType = $itemObj->getItemType($_POST['itemName']);
-            $requestObj->updateRequest($requestId,$_POST['fName'],$_POST['itemName'], false);
+            $itemObj = new Item($db);
+            $type_id = $itemObj->getItemType($_POST['itemName'][0]);
+            $request_id = $requestObj->getRequestIdFromUser($_POST['fName']);
+            $requestObj->updateRequest($request_id, $_POST['fName'], $_POST['itemName'], $type_id);
         }
-        
+
         $return['data'] = $requestObj->getRequests();
         $return = json_encode($return);
-        
-        echo $return;
-        
+
+        echo $return;        
     }
 
     if (isset($_POST['action']) && $_POST['action'] == 'updateRequest') {
         $requestObj = new Request($db);
-        $requestObj->updateRequest($_POST['id'],$_POST['fName'],$_POST['itemName'], true);
+        
+        $requestObj->updateRequest($_POST['id'], $_POST['fName'], $_POST['itemName'], $_POST['type']);
 
-        $return['data'] = $requestObj->getRequests();
+        $return['data'] = $requestObj->getRequests();;
+        
         $return = json_encode($return);
         
-        echo $return;        
+        echo $return;
+   
     }
 
     if (isset($_GET['action']) && $_GET['action'] == 'getItems') {

@@ -100,6 +100,7 @@ $("document").ready(function () {
     //open modal and populate form
     $("#exampleModal").modal("show");
     $("#action").val("updateRequest");
+    $("#type").remove();
     if ($("#id").length == 0) {
       $("#action").after(
         '<input type="hidden" name="id" id="id" value="' +
@@ -130,6 +131,12 @@ $("document").ready(function () {
 
         //populate form with the name
         $("#fname").val(data.fName);
+
+        $("#id").after(
+          '<input type="hidden" name="type" id="type" value="' + data.id + '">'
+        );
+
+        $("#id").val(data.action);
 
         //take the items and split them into an array
         let items = data.i.split(",");
@@ -194,9 +201,7 @@ $("document").ready(function () {
       success: function (data) {
         // Ajax call completed successfully
         $("#exampleModal select").find("option").remove();
-        $("#exampleModal select").append(
-          '<option value="">Choose...</option>'
-        );
+        $("#exampleModal select").append('<option value="">Choose...</option>');
         $.each(data, function (i) {
           $("#exampleModal select").append(
             '<option value="' + data[i].id + '">' + data[i].item + "</option>"

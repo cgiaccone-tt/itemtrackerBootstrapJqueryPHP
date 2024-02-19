@@ -87,7 +87,7 @@ class Item {
 
         foreach ($item as $key => $value) {
             
-            $result[] = $this->getItemObj($value);
+            $result[] = $this->getItemObj($value['id']);
         }
         
         return $result;

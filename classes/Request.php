@@ -2,7 +2,7 @@
 
 require 'classes/User.php';
 require 'classes/Item.php';
-
+require 'classes/summary.php';
 
 
 class Request
@@ -43,7 +43,7 @@ class Request
         
         $stmt = $this->db->prepare("
         SELECT u.fName, GROUP_CONCAT( i.id SEPARATOR', ') AS i, 
-        it.type, r.id AS action, r.dt_requested
+        it.id, r.id AS action, r.dt_requested
         FROM requests r 
         LEFT JOIN type_requests tr ON r.id = tr.request_fk 
         LEFT JOIN item_type it ON it.id = tr.type_fk 
@@ -97,11 +97,13 @@ class Request
      * @param string $item
      * @return int
      */
-    public function addRequest($fName, $item): int
+    public function addRequest(string $fName, array $item): int
     {
-        error_log("request-addReqest-".print_r($item, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
         //instantiate user object
         $userObj = new User($this->db);
+        $summaryObj = new Summary($this->db);
+
+        //if user does not exist, add user
         if (!$userId = $userObj->getUserByName($fName)) {
             $userId = $userObj->addUser($fName);
         }
@@ -112,7 +114,22 @@ class Request
 
         $request = $this->db->lastInsertId('requests');
 
-        $this->createRequestItemArray($request, $item);
+        //get item for item type determination
+        $itemObj = new Item($this->db);
+        $type_id = $itemObj->getItemType($item[0]);
+        $itemArr = [];
+        if(!is_array($item)){
+            $item = array();
+        }
+        foreach ($item AS $value) {
+            $itemArr[] = array("id" => $value, "item_type" => $type_id);
+        }
+
+        $this->createRequestItemArray($request, $itemArr);
+
+        //insert summary
+        $summaryObj = new Summary($this->db);
+        $summaryObj->insertSummary($request);
 
         return $request;
     }
@@ -145,7 +162,7 @@ class Request
      * @param array $item
      * @return void
      */
-    public function createRequestItemArray($request, $item): void
+    public function createRequestItemArray(int $request, array $item): void
     {
         $itemObj = new Item($this->db);
         $itemObjArr = $itemObj->getItemObjects($item);
@@ -158,49 +175,49 @@ class Request
     /**
      * updateRequest
      * 
-     * update a request in the requests table
+     * update a request in the type_requests table
      *
      * @param int $id
      * @param string $fName
      * @param string $item
+     * @param int $type_id
      * @return bool
      */
-    public function updateRequest($id, $fName, $item, $type=true): bool
+    public function updateRequest(int $id, string $fName, array $item, int $type_id): bool
     {
-        //If type is true then we are pulling items from the type_requests table
-        //and we need to convert to the request id
-        if ($type) {
-            $stmt = $this->db->prepare("SELECT request_fk FROM type_requests WHERE id = :id");
-            $stmt->bindParam(':id', $id);
-            $stmt->execute();
-            $id = $stmt->fetchColumn();
+        //$id is request id
+
+        //get all items for this request
+        $currentRequestItemsArr = $this->getItemsByRequest($id);
+
+        //delete all items for this user (1 user per request id) so that we can repopulate the items
+        $stmt = $this->db->prepare("DELETE FROM type_requests WHERE request_fk = :id");
+        $stmt->bindParam(':id', $id);
+        $stmt->execute();
+        
+        //create an array of items that were submitted and match the structure of $currentRequestItemsArr
+        $itemArr = [];
+        if (!is_array($item)) {
+            $item = array();
         }
-        error_log("request-updateRequest-item-".print_r($item, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
-        $stmt = $this->db->prepare("
-        SELECT i.id 
-        FROM type_requests tr
-        LEFT JOIN items i ON i.id = tr.item_fk
-        WHERE request_fk = :id
-        ");
-        $stmt->bindParam(':id', $id);
-        $stmt->execute();
-        $existingItems = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($item AS $value) {
+            $itemArr[] = array("id" => $value, "item_type" => $type_id);
+        }
 
-        $items = array_merge($item, $existingItems);
+        //remove all items of the same type submitted from the current items
+        foreach ($currentRequestItemsArr AS $key => $value) {
+            if ($value['item_type'] == $type_id) {
+                unset($currentRequestItemsArr[$key]);
+            }
+        }
 
-        //Remove any duplicates
-        $items = is_array($items) ? array_unique($items) : [];
-        error_log("request-updateRequest-items-".print_r($items, true)."\n\n", 3,"C:\cg\work\ascendion\logs\\test.log");
+        //merge the current items minus the matching type with the new items of that type
+        $finalItemsArr = array_merge($currentRequestItemsArr, $itemArr);
 
-        $stmt = $this->db->prepare("
-        DELETE FROM type_requests 
-        WHERE request_fk = :id
-        ");
-        $stmt->bindParam(':id', $id);
-        $stmt->execute();
+       
+        //repopulate the items
+        $this->createRequestItemArray($id, $finalItemsArr);
 
-        $this->createRequestItemArray($id, $items);
-    
 
         //instantiate user object
         $userObj = new User($this->db);
@@ -209,8 +226,27 @@ class Request
             $this->updateUserInReqest($id, $userId);
         }
 
+        //insert summary
+        $summaryObj = new Summary($this->db);
+        $summaryObj->insertSummary($id);
+
 
         return true;
+    }
+
+    public function getItemsByRequest(int $id): array
+    {
+        $stmt = $this->db->prepare("
+        SELECT i.id, i.item_type FROM type_requests tr 
+        LEFT JOIN items i ON i.id = tr.item_fk
+        WHERE request_fk = :id
+        ");
+        $stmt->bindParam(':id', $id);
+        $stmt->execute();
+        if (!$result = $stmt->fetchAll(PDO::FETCH_ASSOC)) {
+            return [];
+        }
+        return $result;
     }
 
     /**

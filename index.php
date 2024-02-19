@@ -1,9 +1,3 @@
-<?php
-
-require_once('classes/db.php');
-require_once('classes/Item.php');
-require_once('db.php');
-?>
 <!doctype html>
 <html lang="en">
 
