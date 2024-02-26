@@ -1,6 +1,6 @@
 <?php
 
-$db = new db('mysql:host=localhost;dbname=ascendion', 'root', '', array());
+$db = new db();
 
 if (isset($_GET['action']) && $_GET['action'] == 'getRequest') {
     $requestObj = new Request($db);
@@ -95,7 +95,7 @@ class db
      */
     public function __construct()
     {
-        $dsn = 'mysql:host=localhost;dbname=ascendion1';
+        $dsn = 'mysql:host=localhost;dbname=ascendionCG';
         $username = 'root';
         $password = '';
         $driver_options = array();
